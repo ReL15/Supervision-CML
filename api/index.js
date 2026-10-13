@@ -187,9 +187,10 @@ async function handleApi(req, res) {
   const queryPath = url.searchParams.get('path') || req.query?.path;
   let pathname = url.pathname;
 
-  if ((pathname === '/api' || pathname === '/') && queryPath) {
+  if ((pathname === '/api/index' || pathname === '/api' || pathname === '/') && queryPath) {
     const pathSegments = Array.isArray(queryPath) ? queryPath : [queryPath];
-    pathname = `/api/${pathSegments.join('/')}`;
+    const apiPath = pathSegments.join('/').replace(/^\/+|\/+$/g, '');
+    pathname = `/api/${apiPath}`;
   } else if (!pathname.startsWith('/api/')) {
     pathname = `/api${pathname === '/' ? '' : pathname}`;
   }
