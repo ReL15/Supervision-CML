@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Supervisión de Aula y Seguimiento Pedagógico MINED",
+  "description": "Plataforma institucional del Ministerio de Educación de El Salvador (MINED) para la supervisión de aula, registro pedagógico, georreferenciación de centros escolares y analítica docente.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
