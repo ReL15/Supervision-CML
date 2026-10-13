@@ -78,6 +78,31 @@ export const saveSchool = (newSchool: School): boolean => {
   if (exists) return false;
   schools.push(newSchool);
   localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(schools));
+
+  // Enviar al backend si está configurado (no bloquear la UI)
+  const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
+  if (apiBase) {
+    fetch(`${apiBase.replace(/\/+$/,'')}/api/schools`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codigo: newSchool.codigo,
+        nombre: newSchool.nombre,
+        password_hash: newSchool.password,
+        perfil_completado: newSchool.perfilCompletado,
+        director_nombre: newSchool.directorNombre,
+        director_correo: newSchool.directorCorreo,
+        director_telefono: newSchool.directorTelefono,
+        director_dui: newSchool.directorDui,
+        departamento: newSchool.departamento,
+        municipio: newSchool.municipio,
+        latitud: newSchool.latitud,
+        longitud: newSchool.longitud,
+        fecha_registro: newSchool.fechaRegistro,
+      }),
+    }).catch((err) => console.warn('Failed to sync school to API', err));
+  }
+
   return true;
 };
 
@@ -130,6 +155,17 @@ export const saveOrUpdateTeacher = (teacherData: Partial<Teacher> & { correo: st
     };
     teachers[index] = updated;
     localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
+
+    // Sync to API if configured
+    const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
+    if (apiBase) {
+      fetch(`${apiBase.replace(/\/+$/,'')}/api/teachers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch((err) => console.warn('Failed to sync teacher to API', err));
+    }
+
     return updated;
   } else {
     const newTeacher: Teacher = {
@@ -144,6 +180,16 @@ export const saveOrUpdateTeacher = (teacherData: Partial<Teacher> & { correo: st
     };
     teachers.push(newTeacher);
     localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
+
+    const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
+    if (apiBase) {
+      fetch(`${apiBase.replace(/\/+$/,'')}/api/teachers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTeacher),
+      }).catch((err) => console.warn('Failed to sync teacher to API', err));
+    }
+
     return newTeacher;
   }
 };
@@ -190,6 +236,16 @@ export const saveSupervision = (sup: Supervision) => {
       dui: sup.docenteDui,
       escuelasVinculadas: [sup.codigoEscuela],
     });
+  }
+
+  // Sync to backend if configured (non-blocking)
+  const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
+  if (apiBase) {
+    fetch(`${apiBase.replace(/\/+$/,'')}/api/supervisions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sup),
+    }).catch((err) => console.warn('Failed to sync supervision to API', err));
   }
 };
 
