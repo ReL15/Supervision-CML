@@ -20,6 +20,7 @@ import { MasterSchoolManagerModal } from './components/MasterSchoolManagerModal'
 import { MySQLSchemaModal } from './components/MySQLSchemaModal';
 import { OfficialReportModal } from './components/OfficialReportModal';
 import { SchoolOnboardingModal } from './components/SchoolOnboardingModal';
+import { EditSchoolModal } from './components/EditSchoolModal';
 import {
   PlusCircle,
   FileCheck2,
@@ -60,6 +61,7 @@ export default function App() {
   const [showMasterManager, setShowMasterManager] = useState(false);
   const [showMySQLModal, setShowMySQLModal] = useState(false);
   const [viewingFicha, setViewingFicha] = useState<Supervision | null>(null);
+  const [editingOwnSchool, setEditingOwnSchool] = useState(false);
 
   // Recargar datos
   const refreshData = () => {
@@ -129,6 +131,7 @@ export default function App() {
         }}
         onOpenTeacherDirectory={() => setShowTeacherModal(true)}
         onOpenMasterManager={() => setShowMasterManager(true)}
+        onOpenSchoolProfile={() => setEditingOwnSchool(true)}
         onOpenMySQLModal={() => setShowMySQLModal(true)}
         onLogout={handleLogout}
       />
@@ -334,6 +337,7 @@ export default function App() {
             currentSession={session}
             onNewSupervisionInSchool={handleNewSupervisionInSchool}
             onViewSupervisionFicha={(sup) => setViewingFicha(sup)}
+            onSchoolUpdated={refreshData}
           />
         )}
       </main>
@@ -399,6 +403,24 @@ export default function App() {
           school={currentSchoolObj}
           isOpen={true}
           onCompleted={(updated) => {
+            refreshData();
+            if (session) {
+              setSession({
+                ...session,
+                schoolName: updated.nombre,
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* Modal para Editar Perfil de la Escuela Activa */}
+      {editingOwnSchool && currentSchoolObj && (
+        <EditSchoolModal
+          school={currentSchoolObj}
+          isOpen={true}
+          onClose={() => setEditingOwnSchool(false)}
+          onSaved={(updated) => {
             refreshData();
             if (session) {
               setSession({

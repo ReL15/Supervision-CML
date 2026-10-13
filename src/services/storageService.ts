@@ -90,6 +90,13 @@ export const updateSchool = (updated: School) => {
   }
 };
 
+export const deleteSchool = (code: string): boolean => {
+  const schools = getSchools();
+  const filtered = schools.filter((s) => s.codigo.trim() !== code.trim());
+  localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(filtered));
+  return true;
+};
+
 // Teachers
 export const getTeachers = (): Teacher[] => {
   try {

@@ -13,7 +13,9 @@ import {
   ChevronRight,
   PlusCircle,
   FileText,
+  Edit3,
 } from 'lucide-react';
+import { EditSchoolModal } from './EditSchoolModal';
 
 interface SchoolsMapViewProps {
   schools: School[];
@@ -21,6 +23,7 @@ interface SchoolsMapViewProps {
   currentSession: UserSession;
   onNewSupervisionInSchool?: (schoolCode: string) => void;
   onViewSupervisionFicha?: (sup: Supervision) => void;
+  onSchoolUpdated?: () => void;
 }
 
 export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
@@ -29,6 +32,7 @@ export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
   currentSession,
   onNewSupervisionInSchool,
   onViewSupervisionFicha,
+  onSchoolUpdated,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -40,6 +44,7 @@ export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
     : schools[0];
 
   const [selectedSchool, setSelectedSchool] = useState<School | null>(initialSelected || null);
+  const [isEditingSchool, setIsEditingSchool] = useState(false);
 
   // Filtrar escuelas visibles: si es usuario de escuela, muestra su escuela o las autorizadas
   const displaySchools = isSchoolUser
@@ -252,11 +257,22 @@ export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg self-start sm:self-auto">
-              <Navigation className="w-3.5 h-3.5 text-slate-500" />
-              <span>
-                GPS: {selectedSchool.latitud?.toFixed(4)}, {selectedSchool.longitud?.toFixed(4)}
-              </span>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
+                <Navigation className="w-3.5 h-3.5 text-slate-500" />
+                <span>
+                  GPS: {selectedSchool.latitud?.toFixed(4)}, {selectedSchool.longitud?.toFixed(4)}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsEditingSchool(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0f2d59] border border-blue-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#1b4985]" />
+                <span>Editar Escuela</span>
+              </button>
             </div>
           </div>
 
@@ -376,6 +392,19 @@ export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de edición de la escuela seleccionada */}
+      {selectedSchool && (
+        <EditSchoolModal
+          school={selectedSchool}
+          isOpen={isEditingSchool}
+          onClose={() => setIsEditingSchool(false)}
+          onSaved={(updated) => {
+            setSelectedSchool(updated);
+            if (onSchoolUpdated) onSchoolUpdated();
+          }}
+        />
       )}
     </div>
   );

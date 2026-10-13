@@ -19,6 +19,7 @@ interface NavbarProps {
   onTabChange: (tab: ActiveTab) => void;
   onOpenTeacherDirectory: () => void;
   onOpenMasterManager?: () => void;
+  onOpenSchoolProfile?: () => void;
   onOpenMySQLModal: () => void;
   onLogout: () => void;
 }
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   onOpenTeacherDirectory,
   onOpenMasterManager,
+  onOpenSchoolProfile,
   onOpenMySQLModal,
   onLogout,
 }) => {
@@ -136,6 +138,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Shield className="w-3.5 h-3.5" />
                 <span>Gestión Escuelas</span>
+              </button>
+            )}
+
+            {!isMaster && onOpenSchoolProfile && (
+              <button
+                type="button"
+                onClick={onOpenSchoolProfile}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl border border-white/15 transition-colors cursor-pointer"
+              >
+                <Building2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>Perfil de Escuela</span>
               </button>
             )}
 
