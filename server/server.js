@@ -1,20 +1,16 @@
 import dotenv from 'dotenv';
 import express from 'express';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 
 dotenv.config();
 
 const app = express();
 const port = Number(process.env.SERVER_PORT || 4000);
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'mined_supervision_db',
-  waitForConnections: true,
-  connectionLimit: 10,
-  timezone: 'Z',
+const databaseUrl = process.env.DATABASE_URL;
+const pool = new pg.Pool({
+  connectionString: databaseUrl,
+  max: 10,
+  idleTimeoutMillis: 30000,
 });
 
 app.use(express.json({ limit: '1mb' }));
@@ -103,8 +99,8 @@ async function initializeSchema() {
       longitud DECIMAL(11, 8),
       fecha_registro DATE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS docentes (
@@ -116,7 +112,7 @@ async function initializeSchema() {
       especialidad VARCHAR(150),
       fecha_registro DATE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    )
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS docente_escuelas (
@@ -126,7 +122,7 @@ async function initializeSchema() {
       PRIMARY KEY (docente_correo, codigo_escuela),
       FOREIGN KEY (docente_correo) REFERENCES docentes(correo) ON DELETE CASCADE,
       FOREIGN KEY (codigo_escuela) REFERENCES centros_escolares(codigo) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    )
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS supervisiones_aula (
@@ -141,45 +137,36 @@ async function initializeSchema() {
       fecha_supervision DATE NOT NULL,
       hora_inicio TIME NOT NULL,
       hora_fin TIME NOT NULL,
-      duracion_minutos INT UNSIGNED NOT NULL,
-      matricula_siges INT UNSIGNED NOT NULL,
-      estudiantes_asistieron INT UNSIGNED NOT NULL,
-      estudiantes_no_asistieron INT UNSIGNED NOT NULL,
+      duracion_minutos INTEGER NOT NULL CHECK (duracion_minutos >= 0),
+      matricula_siges INTEGER NOT NULL CHECK (matricula_siges >= 0),
+      estudiantes_asistieron INTEGER NOT NULL CHECK (estudiantes_asistieron >= 0),
+      estudiantes_no_asistieron INTEGER NOT NULL CHECK (estudiantes_no_asistieron >= 0),
       porcentaje_asistencia DECIMAL(5,2),
-      telefonos_utilizados INT UNSIGNED DEFAULT 0,
-      laptops_computadoras INT UNSIGNED DEFAULT 0,
-      dispositivos_apoyo INT UNSIGNED DEFAULT 0,
-      total_dispositivos INT UNSIGNED DEFAULT 0,
-      f4_completados INT UNSIGNED DEFAULT 0,
-      f1_completado ENUM('Sí', 'No') DEFAULT 'No',
+      telefonos_utilizados INTEGER DEFAULT 0 CHECK (telefonos_utilizados >= 0),
+      laptops_computadoras INTEGER DEFAULT 0 CHECK (laptops_computadoras >= 0),
+      dispositivos_apoyo INTEGER DEFAULT 0 CHECK (dispositivos_apoyo >= 0),
+      total_dispositivos INTEGER DEFAULT 0 CHECK (total_dispositivos >= 0),
+      f4_completados INTEGER DEFAULT 0 CHECK (f4_completados >= 0),
+      f1_completado VARCHAR(3) DEFAULT 'No' CHECK (f1_completado IN ('Sí', 'No')),
       observaciones TEXT,
       creado_por VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (codigo_escuela) REFERENCES centros_escolares(codigo) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    )
   `);
-  const [sectionColumns] = await pool.execute(
-    `SELECT COUNT(*) AS column_count
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'supervisiones_aula'
-       AND COLUMN_NAME = 'seccion'`,
+  await pool.query(
+    "ALTER TABLE supervisiones_aula ADD COLUMN IF NOT EXISTS seccion VARCHAR(100) NOT NULL DEFAULT ''",
   );
-  if (Number(sectionColumns[0].column_count) === 0) {
-    await pool.query(
-      "ALTER TABLE supervisiones_aula ADD COLUMN seccion VARCHAR(100) NOT NULL DEFAULT '' AFTER grado",
-    );
-  }
 }
 
 app.get('/api/ping', asyncRoute(async (_req, res) => {
   await pool.query('SELECT 1');
-  res.json({ ok: true, database: process.env.DB_NAME || 'mined_supervision_db' });
+  res.json({ ok: true, database: databaseUrl ? new URL(databaseUrl).pathname.slice(1) : 'unknown' });
 }));
 
 app.get('/api/schools', asyncRoute(async (_req, res) => {
-  const [rows] = await pool.query('SELECT * FROM centros_escolares ORDER BY nombre');
+  const { rows } = await pool.query('SELECT * FROM centros_escolares ORDER BY nombre');
   res.json(rows.map(schoolFromRow));
 }));
 
@@ -188,11 +175,11 @@ app.post('/api/schools', asyncRoute(async (req, res) => {
   if (!school.codigo || !school.nombre || !school.password) {
     return res.status(400).json({ error: 'Código, nombre y contraseña son obligatorios.' });
   }
-  await pool.execute(
+  await pool.query(
     `INSERT INTO centros_escolares
       (codigo, nombre, password_hash, perfil_completado, director_nombre, director_correo,
        director_telefono, director_dui, departamento, municipio, latitud, longitud, fecha_registro)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       school.codigo, school.nombre, school.password, Boolean(school.perfilCompletado),
       school.directorNombre || null, school.directorCorreo || null,
@@ -206,12 +193,12 @@ app.post('/api/schools', asyncRoute(async (req, res) => {
 
 app.put('/api/schools/:codigo', asyncRoute(async (req, res) => {
   const school = req.body;
-  await pool.execute(
+  const { rowCount } = await pool.query(
     `UPDATE centros_escolares
-     SET nombre = ?, password_hash = ?, perfil_completado = ?, director_nombre = ?,
-         director_correo = ?, director_telefono = ?, director_dui = ?, departamento = ?,
-         municipio = ?, latitud = ?, longitud = ?
-     WHERE codigo = ?`,
+     SET nombre = $1, password_hash = $2, perfil_completado = $3, director_nombre = $4,
+         director_correo = $5, director_telefono = $6, director_dui = $7, departamento = $8,
+         municipio = $9, latitud = $10, longitud = $11, updated_at = CURRENT_TIMESTAMP
+     WHERE codigo = $12`,
     [
       school.nombre, school.password, Boolean(school.perfilCompletado),
       school.directorNombre || null, school.directorCorreo || null,
@@ -220,23 +207,22 @@ app.put('/api/schools/:codigo', asyncRoute(async (req, res) => {
       school.latitud ?? null, school.longitud ?? null, req.params.codigo,
     ],
   );
-  const [rows] = await pool.execute(
-    'SELECT codigo FROM centros_escolares WHERE codigo = ?',
-    [req.params.codigo],
-  );
-  if (!rows.length) return res.status(404).json({ error: 'Centro escolar no encontrado.' });
+  if (!rowCount) return res.status(404).json({ error: 'Centro escolar no encontrado.' });
   res.json({ ok: true });
 }));
 
 app.delete('/api/schools/:codigo', asyncRoute(async (req, res) => {
-  const [result] = await pool.execute('DELETE FROM centros_escolares WHERE codigo = ?', [req.params.codigo]);
-  if (!result.affectedRows) return res.status(404).json({ error: 'Centro escolar no encontrado.' });
+  const { rowCount } = await pool.query(
+    'DELETE FROM centros_escolares WHERE codigo = $1',
+    [req.params.codigo],
+  );
+  if (!rowCount) return res.status(404).json({ error: 'Centro escolar no encontrado.' });
   res.json({ ok: true });
 }));
 
 app.get('/api/teachers', asyncRoute(async (_req, res) => {
-  const [rows] = await pool.query(`
-    SELECT d.*, GROUP_CONCAT(de.codigo_escuela ORDER BY de.codigo_escuela SEPARATOR ',') AS escuelas_vinculadas
+  const { rows } = await pool.query(`
+    SELECT d.*, STRING_AGG(de.codigo_escuela, ',' ORDER BY de.codigo_escuela) AS escuelas_vinculadas
     FROM docentes d
     LEFT JOIN docente_escuelas de ON de.docente_correo = d.correo
     GROUP BY d.id
@@ -250,14 +236,14 @@ app.post('/api/teachers', asyncRoute(async (req, res) => {
   if (!teacher.correo || !teacher.nombre) {
     return res.status(400).json({ error: 'Correo y nombre del docente son obligatorios.' });
   }
-  const connection = await pool.getConnection();
+  const connection = await pool.connect();
   try {
-    await connection.beginTransaction();
-    await connection.execute(
+    await connection.query('BEGIN');
+    await connection.query(
       `INSERT INTO docentes (id, nombre, correo, telefono, dui, especialidad, fecha_registro)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), telefono = VALUES(telefono),
-         dui = VALUES(dui), especialidad = VALUES(especialidad)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (correo) DO UPDATE SET nombre = EXCLUDED.nombre, telefono = EXCLUDED.telefono,
+         dui = EXCLUDED.dui, especialidad = EXCLUDED.especialidad`,
       [
         teacher.id || `tch-${Date.now()}`, teacher.nombre, teacher.correo,
         teacher.telefono || null, teacher.dui || null, teacher.especialidad || null,
@@ -265,14 +251,14 @@ app.post('/api/teachers', asyncRoute(async (req, res) => {
       ],
     );
     for (const schoolCode of teacher.escuelasVinculadas || []) {
-      await connection.execute(
-        'INSERT IGNORE INTO docente_escuelas (docente_correo, codigo_escuela) VALUES (?, ?)',
+      await connection.query(
+        'INSERT INTO docente_escuelas (docente_correo, codigo_escuela) VALUES ($1, $2) ON CONFLICT DO NOTHING',
         [teacher.correo, schoolCode],
       );
     }
-    await connection.commit();
+    await connection.query('COMMIT');
   } catch (error) {
-    await connection.rollback();
+    await connection.query('ROLLBACK');
     throw error;
   } finally {
     connection.release();
@@ -281,7 +267,7 @@ app.post('/api/teachers', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/supervisions', asyncRoute(async (_req, res) => {
-  const [rows] = await pool.query(`
+  const { rows } = await pool.query(`
     SELECT s.*, e.nombre AS nombre_escuela
     FROM supervisiones_aula s
     LEFT JOIN centros_escolares e ON e.codigo = s.codigo_escuela
@@ -295,30 +281,30 @@ app.post('/api/supervisions', asyncRoute(async (req, res) => {
   if (!s.id || !s.codigoEscuela || !s.grado || !s.fecha || !s.horaInicio || !s.horaFin) {
     return res.status(400).json({ error: 'Faltan campos obligatorios de la supervisión.' });
   }
-  await pool.execute(
+  await pool.query(
     `INSERT INTO supervisiones_aula
       (id, codigo_escuela, grado, seccion, grado_otro_detalle, docente_correo,
        docente_nombre, docente_telefono, docente_dui, fecha_supervision, hora_inicio, hora_fin,
        duracion_minutos, matricula_siges, estudiantes_asistieron, estudiantes_no_asistieron,
        porcentaje_asistencia, telefonos_utilizados, laptops_computadoras, dispositivos_apoyo,
        total_dispositivos, f4_completados, f1_completado, observaciones, creado_por, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       codigo_escuela = VALUES(codigo_escuela), grado = VALUES(grado),
-       seccion = VALUES(seccion),
-       grado_otro_detalle = VALUES(grado_otro_detalle),
-       docente_correo = VALUES(docente_correo), docente_nombre = VALUES(docente_nombre),
-       docente_telefono = VALUES(docente_telefono), docente_dui = VALUES(docente_dui),
-       fecha_supervision = VALUES(fecha_supervision), hora_inicio = VALUES(hora_inicio),
-       hora_fin = VALUES(hora_fin), duracion_minutos = VALUES(duracion_minutos),
-       matricula_siges = VALUES(matricula_siges), estudiantes_asistieron = VALUES(estudiantes_asistieron),
-       estudiantes_no_asistieron = VALUES(estudiantes_no_asistieron),
-       porcentaje_asistencia = VALUES(porcentaje_asistencia),
-       telefonos_utilizados = VALUES(telefonos_utilizados),
-       laptops_computadoras = VALUES(laptops_computadoras), dispositivos_apoyo = VALUES(dispositivos_apoyo),
-       total_dispositivos = VALUES(total_dispositivos), f4_completados = VALUES(f4_completados),
-       f1_completado = VALUES(f1_completado), observaciones = VALUES(observaciones),
-       creado_por = VALUES(creado_por), updated_at = CURRENT_TIMESTAMP`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+     ON CONFLICT (id) DO UPDATE SET
+      codigo_escuela = EXCLUDED.codigo_escuela, grado = EXCLUDED.grado,
+      seccion = EXCLUDED.seccion,
+      grado_otro_detalle = EXCLUDED.grado_otro_detalle,
+      docente_correo = EXCLUDED.docente_correo, docente_nombre = EXCLUDED.docente_nombre,
+      docente_telefono = EXCLUDED.docente_telefono, docente_dui = EXCLUDED.docente_dui,
+      fecha_supervision = EXCLUDED.fecha_supervision, hora_inicio = EXCLUDED.hora_inicio,
+      hora_fin = EXCLUDED.hora_fin, duracion_minutos = EXCLUDED.duracion_minutos,
+      matricula_siges = EXCLUDED.matricula_siges, estudiantes_asistieron = EXCLUDED.estudiantes_asistieron,
+      estudiantes_no_asistieron = EXCLUDED.estudiantes_no_asistieron,
+      porcentaje_asistencia = EXCLUDED.porcentaje_asistencia,
+      telefonos_utilizados = EXCLUDED.telefonos_utilizados,
+      laptops_computadoras = EXCLUDED.laptops_computadoras, dispositivos_apoyo = EXCLUDED.dispositivos_apoyo,
+      total_dispositivos = EXCLUDED.total_dispositivos, f4_completados = EXCLUDED.f4_completados,
+      f1_completado = EXCLUDED.f1_completado, observaciones = EXCLUDED.observaciones,
+      creado_por = EXCLUDED.creado_por, updated_at = CURRENT_TIMESTAMP`,
     [
       s.id, s.codigoEscuela, s.grado, s.seccion || '', s.gradoOtroDetalle || null,
       s.docenteCorreo || '', s.docenteNombre,
@@ -337,8 +323,8 @@ app.post('/api/supervisions', asyncRoute(async (req, res) => {
 }));
 
 app.delete('/api/supervisions/:id', asyncRoute(async (req, res) => {
-  const [result] = await pool.execute('DELETE FROM supervisiones_aula WHERE id = ?', [req.params.id]);
-  if (!result.affectedRows) return res.status(404).json({ error: 'Supervisión no encontrada.' });
+  const { rowCount } = await pool.query('DELETE FROM supervisiones_aula WHERE id = $1', [req.params.id]);
+  if (!rowCount) return res.status(404).json({ error: 'Supervisión no encontrada.' });
   res.json({ ok: true });
 }));
 
@@ -348,13 +334,16 @@ app.use((error, _req, res, _next) => {
 });
 
 async function start() {
+  if (!databaseUrl) {
+    throw new Error('Falta configurar DATABASE_URL en el archivo .env.');
+  }
   await initializeSchema();
   app.listen(port, '127.0.0.1', () => {
-    console.log(`API MySQL disponible en http://127.0.0.1:${port}`);
+    console.log(`API PostgreSQL disponible en http://127.0.0.1:${port}`);
   });
 }
 
 start().catch((error) => {
-  console.error(`No se pudo conectar a MySQL (${process.env.DB_NAME || 'mined_supervision_db'}):`, error.message);
+  console.error('No se pudo iniciar la API de PostgreSQL:', error.message);
   process.exitCode = 1;
 });

@@ -41,7 +41,7 @@ export default function App() {
       },
       (error: unknown) => {
         if (!cancelled) {
-          setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de MySQL.');
+          setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de PostgreSQL.');
         }
       }
     );
@@ -112,14 +112,14 @@ export default function App() {
         <div className="max-w-lg rounded-2xl bg-white p-6 text-center shadow-sm">
           {storageError ? (
             <>
-              <h1 className="text-lg font-bold text-red-700">No se pudo conectar con MySQL</h1>
+              <h1 className="text-lg font-bold text-red-700">No se pudo conectar con PostgreSQL</h1>
               <p className="mt-2 text-sm text-slate-600">{storageError}</p>
               <p className="mt-3 text-xs text-slate-500">
-                Inicie MySQL en Laragon y ejecute <code>npm run server</code>. Luego recargue la página.
+                Configure PostgreSQL en el archivo <code>.env</code> y ejecute <code>npm run server</code>. Luego recargue la página.
               </p>
             </>
           ) : (
-            <p className="text-sm font-medium text-slate-600">Conectando con la base de datos MySQL…</p>
+            <p className="text-sm font-medium text-slate-600">Conectando con la base de datos PostgreSQL…</p>
           )}
         </div>
       </main>

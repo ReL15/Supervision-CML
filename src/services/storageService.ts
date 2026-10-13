@@ -22,7 +22,7 @@ const request = async <T,>(url: string, init?: RequestInit): Promise<T> => {
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     });
   } catch {
-    throw new Error('No se pudo conectar con la API. Verifique que MySQL y npm run server estén ejecutándose.');
+    throw new Error('No se pudo conectar con la API. Verifique que PostgreSQL y npm run server estén configurados.');
   }
 
   if (!response.ok) {
@@ -268,8 +268,15 @@ export const generateSecurePassword = (code?: string): string => {
   return `Mined#${code || 'SV'}-${randomPart}`;
 };
 
-// MySQL DDL & SQL Generator
-export const generateMySqlDump = (): string => {
+const sqlLiteral = (value: unknown): string => {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  return `'${String(value).replace(/'/g, "''")}'`;
+};
+
+// PostgreSQL DDL & SQL Generator
+export const generatePostgresDump = (): string => {
   const schools = getSchools();
   const teachers = getTeachers();
   const supervisions = getSupervisions();
@@ -277,14 +284,9 @@ export const generateMySqlDump = (): string => {
   return `-- ====================================================================
 -- SISTEMA DE SUPERVISIÓN DE AULA Y SEGUIMIENTO PEDAGÓGICO
 -- MINISTERIO DE EDUCACIÓN DE EL SALVADOR (MINED)
--- Esquema de Base de Datos Relacional MySQL 8.0+ / MariaDB
+-- Esquema de Base de Datos Relacional PostgreSQL (Neon)
 -- Exportado el: ${new Date().toISOString()}
 -- ====================================================================
-
-SET FOREIGN_KEY_CHECKS = 0;
-DROP DATABASE IF EXISTS mined_supervision_db;
-CREATE DATABASE mined_supervision_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE mined_supervision_db;
 
 -- --------------------------------------------------------
 -- 1. Tabla: centros_escolares
@@ -304,8 +306,8 @@ CREATE TABLE IF NOT EXISTS centros_escolares (
     longitud DECIMAL(11, 8),
     fecha_registro DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- --------------------------------------------------------
 -- 2. Tabla: docentes
@@ -320,7 +322,7 @@ CREATE TABLE IF NOT EXISTS docentes (
     fecha_registro DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_correo_clases CHECK (correo LIKE '%@clases.edu.sv')
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+);
 
 -- --------------------------------------------------------
 -- 3. Tabla: docente_escuelas (Relación Muchos a Muchos)
@@ -331,7 +333,7 @@ CREATE TABLE IF NOT EXISTS docente_escuelas (
     asignado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (docente_correo, codigo_escuela),
     FOREIGN KEY (codigo_escuela) REFERENCES centros_escolares(codigo) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+);
 
 -- --------------------------------------------------------
 -- 4. Tabla: supervisiones_aula
@@ -349,30 +351,34 @@ CREATE TABLE IF NOT EXISTS supervisiones_aula (
     fecha_supervision DATE NOT NULL,
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
-    duracion_minutos INT UNSIGNED NOT NULL,
-    matricula_siges INT UNSIGNED NOT NULL,
-    estudiantes_asistieron INT UNSIGNED NOT NULL,
-    estudiantes_no_asistieron INT UNSIGNED NOT NULL,
+    duracion_minutos INTEGER NOT NULL CHECK (duracion_minutos >= 0),
+    matricula_siges INTEGER NOT NULL CHECK (matricula_siges >= 0),
+    estudiantes_asistieron INTEGER NOT NULL CHECK (estudiantes_asistieron >= 0),
+    estudiantes_no_asistieron INTEGER NOT NULL CHECK (estudiantes_no_asistieron >= 0),
     porcentaje_asistencia DECIMAL(5,2),
-    telefonos_utilizados INT UNSIGNED DEFAULT 0,
-    laptops_computadoras INT UNSIGNED DEFAULT 0,
-    dispositivos_apoyo INT UNSIGNED DEFAULT 0,
-    total_dispositivos INT UNSIGNED DEFAULT 0,
-    f4_completados INT UNSIGNED DEFAULT 0,
-    f1_completado ENUM('Sí', 'No') DEFAULT 'No',
+    telefonos_utilizados INTEGER DEFAULT 0 CHECK (telefonos_utilizados >= 0),
+    laptops_computadoras INTEGER DEFAULT 0 CHECK (laptops_computadoras >= 0),
+    dispositivos_apoyo INTEGER DEFAULT 0 CHECK (dispositivos_apoyo >= 0),
+    total_dispositivos INTEGER DEFAULT 0 CHECK (total_dispositivos >= 0),
+    f4_completados INTEGER DEFAULT 0 CHECK (f4_completados >= 0),
+    f1_completado VARCHAR(3) DEFAULT 'No' CHECK (f1_completado IN ('Sí', 'No')),
     observaciones TEXT,
     creado_por VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (codigo_escuela) REFERENCES centros_escolares(codigo) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+);
 
 ${schools.length > 0 ? `
 -- Inserciones de Centros Escolares
 ${schools
   .map(
     (s) =>
-      `INSERT INTO centros_escolares (codigo, nombre, password_hash, perfil_completado, director_nombre, director_correo, director_telefono, director_dui, departamento, municipio, latitud, longitud, fecha_registro) VALUES ('${s.codigo}', '${s.nombre.replace(/'/g, "''")}', '${s.password}', ${s.perfilCompletado ? 1 : 0}, '${s.directorNombre?.replace(/'/g, "''") || ''}', '${s.directorCorreo || ''}', '${s.directorTelefono || ''}', '${s.directorDui || ''}', '${s.departamento || ''}', '${s.municipio || ''}', ${s.latitud || 0}, ${s.longitud || 0}, '${s.fechaRegistro || '2026-01-01'}');`
+      `INSERT INTO centros_escolares (codigo, nombre, password_hash, perfil_completado, director_nombre, director_correo, director_telefono, director_dui, departamento, municipio, latitud, longitud, fecha_registro) VALUES (${[
+        s.codigo, s.nombre, s.password, s.perfilCompletado, s.directorNombre, s.directorCorreo,
+        s.directorTelefono, s.directorDui, s.departamento, s.municipio, s.latitud, s.longitud,
+        s.fechaRegistro || '2026-01-01',
+      ].map(sqlLiteral).join(', ')});`
   )
   .join('\n')}
 ` : '-- (Sin registros de centros escolares aún)\n'}
@@ -382,7 +388,9 @@ ${teachers.length > 0 ? `
 ${teachers
   .map(
     (t) =>
-      `INSERT INTO docentes (id, nombre, correo, telefono, dui, especialidad, fecha_registro) VALUES ('${t.id}', '${t.nombre.replace(/'/g, "''")}', '${t.correo}', '${t.telefono || ''}', '${t.dui || ''}', '${t.especialidad?.replace(/'/g, "''") || ''}', '${t.fechaRegistro || '2026-01-01'}');`
+      `INSERT INTO docentes (id, nombre, correo, telefono, dui, especialidad, fecha_registro) VALUES (${[
+        t.id, t.nombre, t.correo, t.telefono, t.dui, t.especialidad, t.fechaRegistro || '2026-01-01',
+      ].map(sqlLiteral).join(', ')});`
   )
   .join('\n')}
 ` : '-- (Sin registros de docentes aún)\n'}
@@ -392,11 +400,17 @@ ${supervisions.length > 0 ? `
 ${supervisions
   .map(
     (sup) =>
-      `INSERT INTO supervisiones_aula (id, codigo_escuela, grado, seccion, docente_correo, docente_nombre, docente_telefono, docente_dui, fecha_supervision, hora_inicio, hora_fin, duracion_minutos, matricula_siges, estudiantes_asistieron, estudiantes_no_asistieron, porcentaje_asistencia, telefonos_utilizados, laptops_computadoras, dispositivos_apoyo, total_dispositivos, f4_completados, f1_completado, observaciones, creado_por) VALUES ('${sup.id}', '${sup.codigoEscuela}', '${sup.grado}', '${sup.seccion?.replace(/'/g, "''") || ''}', '${sup.docenteCorreo}', '${sup.docenteNombre.replace(/'/g, "''")}', '${sup.docenteTelefono}', '${sup.docenteDui}', '${sup.fecha}', '${sup.horaInicio}:00', '${sup.horaFin}:00', ${sup.duracionMinutos}, ${sup.matriculaSiges}, ${sup.estudiantesAsistieron}, ${sup.estudiantesNoAsistieron}, ${sup.porcentajeAsistencia}, ${sup.telefonosUtilizados}, ${sup.laptopsComputadoras}, ${sup.dispositivosApoyoPedagogico}, ${sup.totalDispositivos}, ${sup.f4Completados}, '${sup.f1Completado}', '${sup.observaciones.replace(/'/g, "''")}', '${sup.creadoPor}');`
+      `INSERT INTO supervisiones_aula (id, codigo_escuela, grado, seccion, docente_correo, docente_nombre, docente_telefono, docente_dui, fecha_supervision, hora_inicio, hora_fin, duracion_minutos, matricula_siges, estudiantes_asistieron, estudiantes_no_asistieron, porcentaje_asistencia, telefonos_utilizados, laptops_computadoras, dispositivos_apoyo, total_dispositivos, f4_completados, f1_completado, observaciones, creado_por) VALUES (${[
+        sup.id, sup.codigoEscuela, sup.grado, sup.seccion, sup.docenteCorreo, sup.docenteNombre,
+        sup.docenteTelefono, sup.docenteDui, sup.fecha, `${sup.horaInicio}:00`, `${sup.horaFin}:00`,
+        sup.duracionMinutos, sup.matriculaSiges, sup.estudiantesAsistieron, sup.estudiantesNoAsistieron,
+        sup.porcentajeAsistencia, sup.telefonosUtilizados, sup.laptopsComputadoras,
+        sup.dispositivosApoyoPedagogico, sup.totalDispositivos, sup.f4Completados,
+        sup.f1Completado, sup.observaciones, sup.creadoPor,
+      ].map(sqlLiteral).join(', ')});`
   )
   .join('\n')}
 ` : '-- (Sin registros de supervisiones aún)\n'}
 
-SET FOREIGN_KEY_CHECKS = 1;
 `;
 };

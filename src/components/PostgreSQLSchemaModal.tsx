@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { generateMySqlDump } from '../services/storageService';
+import { generatePostgresDump } from '../services/storageService';
 import { X, Database, Copy, Check, Download, Table, Key, ShieldCheck } from 'lucide-react';
 
-interface MySQLSchemaModalProps {
+interface PostgreSQLSchemaModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const MySQLSchemaModal: React.FC<MySQLSchemaModalProps> = ({ isOpen, onClose }) => {
+export const PostgreSQLSchemaModal: React.FC<PostgreSQLSchemaModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
-  const sqlContent = generateMySqlDump();
+  const sqlContent = generatePostgresDump();
 
   if (!isOpen) return null;
 
@@ -24,7 +24,7 @@ export const MySQLSchemaModal: React.FC<MySQLSchemaModalProps> = ({ isOpen, onCl
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'mined_supervision_schema_mysql.sql');
+    link.setAttribute('download', 'mined_supervision_schema_postgresql.sql');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -40,7 +40,7 @@ export const MySQLSchemaModal: React.FC<MySQLSchemaModalProps> = ({ isOpen, onCl
               <Database className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="font-bold text-lg">Esquema Relacional MySQL · MINED El Salvador</h3>
+              <h3 className="font-bold text-lg">Esquema Relacional PostgreSQL · MINED El Salvador</h3>
               <p className="text-xs text-blue-200">
                 Estructura DDL normalizada (centros_escolares, docentes, supervisiones_aula)
               </p>
@@ -97,7 +97,7 @@ export const MySQLSchemaModal: React.FC<MySQLSchemaModalProps> = ({ isOpen, onCl
         {/* Barra Inferior de Acciones */}
         <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between">
           <p className="text-xs text-slate-500">
-            Compatible con MySQL 8.0+, MariaDB 10.6+ y Google Cloud SQL.
+            Compatible con PostgreSQL 14+ y Neon.
           </p>
 
           <div className="flex items-center gap-2">
