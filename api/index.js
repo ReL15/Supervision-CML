@@ -181,7 +181,7 @@ async function requireDatabase(res) {
   return true;
 }
 
-export default async function handler(req, res) {
+async function handleApi(req, res) {
   const url = new URL(req.url || '/', 'https://example.com');
   const method = req.method || 'GET';
   const pathname = url.pathname;
@@ -401,4 +401,15 @@ export default async function handler(req, res) {
   }
 
   return res.status(404).json({ error: 'Ruta no encontrada.' });
+}
+
+export default async function handler(req, res) {
+  try {
+    await handleApi(req, res);
+  } catch (error) {
+    console.error('Vercel API error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Error interno de API. Revise los registros de funciones en Vercel.' });
+    }
+  }
 }

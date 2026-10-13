@@ -4,6 +4,9 @@ import { INITIAL_SCHOOLS, INITIAL_TEACHERS, INITIAL_SUPERVISIONS, MASTER_CREDENT
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const toApiUrl = (path: string) => {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (API_BASE_URL.endsWith('/api') && path.startsWith('/api/')) {
+    return `${API_BASE_URL}${path.slice('/api'.length)}`;
+  }
   return `${API_BASE_URL}${path}`;
 };
 
