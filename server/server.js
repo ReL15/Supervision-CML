@@ -5,13 +5,13 @@ import pg from 'pg';
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.SERVER_PORT || 4000);
+const port = Number(process.env.PORT || process.env.SERVER_PORT || 4000);
 const databaseUrl = process.env.DATABASE_URL;
-const pool = new pg.Pool({
+const pool = databaseUrl ? new pg.Pool({
   connectionString: databaseUrl,
   max: 10,
   idleTimeoutMillis: 30000,
-});
+}) : null;
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -83,6 +83,7 @@ const supervisionFromRow = (row) => ({
 });
 
 async function initializeSchema() {
+  if (!pool) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS centros_escolares (
       codigo VARCHAR(10) PRIMARY KEY,
@@ -161,16 +162,25 @@ async function initializeSchema() {
 }
 
 app.get('/api/ping', asyncRoute(async (_req, res) => {
+  if (!pool) {
+    return res.status(503).json({ ok: false, error: 'DATABASE_URL no configurada.' });
+  }
   await pool.query('SELECT 1');
   res.json({ ok: true, database: databaseUrl ? new URL(databaseUrl).pathname.slice(1) : 'unknown' });
 }));
 
 app.get('/api/schools', asyncRoute(async (_req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const { rows } = await pool.query('SELECT * FROM centros_escolares ORDER BY nombre');
   res.json(rows.map(schoolFromRow));
 }));
 
 app.post('/api/schools', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const school = req.body;
   if (!school.codigo || !school.nombre || !school.password) {
     return res.status(400).json({ error: 'Código, nombre y contraseña son obligatorios.' });
@@ -192,6 +202,9 @@ app.post('/api/schools', asyncRoute(async (req, res) => {
 }));
 
 app.put('/api/schools/:codigo', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const school = req.body;
   const { rowCount } = await pool.query(
     `UPDATE centros_escolares
@@ -212,6 +225,9 @@ app.put('/api/schools/:codigo', asyncRoute(async (req, res) => {
 }));
 
 app.delete('/api/schools/:codigo', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const { rowCount } = await pool.query(
     'DELETE FROM centros_escolares WHERE codigo = $1',
     [req.params.codigo],
@@ -221,6 +237,9 @@ app.delete('/api/schools/:codigo', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/teachers', asyncRoute(async (_req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const { rows } = await pool.query(`
     SELECT d.*, STRING_AGG(de.codigo_escuela, ',' ORDER BY de.codigo_escuela) AS escuelas_vinculadas
     FROM docentes d
@@ -232,6 +251,9 @@ app.get('/api/teachers', asyncRoute(async (_req, res) => {
 }));
 
 app.post('/api/teachers', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const teacher = req.body;
   if (!teacher.correo || !teacher.nombre) {
     return res.status(400).json({ error: 'Correo y nombre del docente son obligatorios.' });
@@ -267,6 +289,9 @@ app.post('/api/teachers', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/supervisions', asyncRoute(async (_req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const { rows } = await pool.query(`
     SELECT s.*, e.nombre AS nombre_escuela
     FROM supervisiones_aula s
@@ -277,6 +302,9 @@ app.get('/api/supervisions', asyncRoute(async (_req, res) => {
 }));
 
 app.post('/api/supervisions', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const s = req.body;
   if (!s.id || !s.codigoEscuela || !s.grado || !s.fecha || !s.horaInicio || !s.horaFin) {
     return res.status(400).json({ error: 'Faltan campos obligatorios de la supervisión.' });
@@ -323,6 +351,9 @@ app.post('/api/supervisions', asyncRoute(async (req, res) => {
 }));
 
 app.delete('/api/supervisions/:id', asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ error: 'BDD no configurada.' });
+  }
   const { rowCount } = await pool.query('DELETE FROM supervisiones_aula WHERE id = $1', [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: 'Supervisión no encontrada.' });
   res.json({ ok: true });
@@ -335,11 +366,11 @@ app.use((error, _req, res, _next) => {
 
 async function start() {
   if (!databaseUrl) {
-    throw new Error('Falta configurar DATABASE_URL en el archivo .env.');
+    console.warn('DATABASE_URL no configurada; el backend quedará disponible solo para verificar la configuración.');
   }
   await initializeSchema();
-  app.listen(port, '127.0.0.1', () => {
-    console.log(`API PostgreSQL disponible en http://127.0.0.1:${port}`);
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`API PostgreSQL disponible en http://0.0.0.0:${port}`);
   });
 }
 

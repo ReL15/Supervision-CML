@@ -1,6 +1,12 @@
 import { School, Teacher, Supervision, UserSession } from '../types';
 import { INITIAL_SCHOOLS, INITIAL_TEACHERS, INITIAL_SUPERVISIONS, MASTER_CREDENTIALS } from '../data/initialData';
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const toApiUrl = (path: string) => {
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_BASE_URL}${path}`;
+};
+
 const STORAGE_KEYS = {
   SCHOOLS: 'mined_supervision_schools_prod_v2',
   TEACHERS: 'mined_supervision_teachers_prod_v2',
@@ -16,13 +22,14 @@ const saveCache = <T,>(key: string, value: T[]) => {
 
 const request = async <T,>(url: string, init?: RequestInit): Promise<T> => {
   let response: Response;
+  const resolvedUrl = toApiUrl(url);
   try {
-    response = await fetch(url, {
+    response = await fetch(resolvedUrl, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     });
   } catch {
-    throw new Error('No se pudo conectar con la API. Verifique que PostgreSQL y npm run server estén configurados.');
+    throw new Error('No se pudo conectar con la API. Verifique que VITE_API_BASE_URL o la API backend estén configurados.');
   }
 
   if (!response.ok) {
