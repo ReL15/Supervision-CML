@@ -184,7 +184,16 @@ async function requireDatabase(res) {
 async function handleApi(req, res) {
   const url = new URL(req.url || '/', 'https://example.com');
   const method = req.method || 'GET';
-  const pathname = url.pathname;
+  const queryPath = url.searchParams.get('path') || req.query?.path;
+  let pathname = url.pathname;
+
+  if ((pathname === '/api' || pathname === '/') && queryPath) {
+    const pathSegments = Array.isArray(queryPath) ? queryPath : [queryPath];
+    pathname = `/api/${pathSegments.join('/')}`;
+  } else if (!pathname.startsWith('/api/')) {
+    pathname = `/api${pathname === '/' ? '' : pathname}`;
+  }
+  pathname = pathname.replace(/\/+$/, '') || '/api';
 
   if (pathname === '/api/ping' && method === 'GET') {
     if (!(await requireDatabase(res))) return;

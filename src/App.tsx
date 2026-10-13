@@ -115,7 +115,7 @@ export default function App() {
               <h1 className="text-lg font-bold text-red-700">No se pudo conectar con PostgreSQL</h1>
               <p className="mt-2 text-sm text-slate-600">{storageError}</p>
               <p className="mt-3 text-xs text-slate-500">
-                Configure PostgreSQL en el archivo <code>.env</code> y ejecute <code>npm run server</code>. Luego recargue la página.
+                Verifique que la función API esté desplegada en Vercel y que las variables <code>DATABASE_URL</code> y <code>VITE_API_BASE_URL</code> estén configuradas. Luego vuelva a desplegar la aplicación.
               </p>
             </>
           ) : (
