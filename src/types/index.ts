@@ -47,6 +47,7 @@ export interface Supervision {
   nombreEscuela: string;
   grado: GradoOficial;
   gradoOtroDetalle?: string;
+  seccion?: string;
   docenteId?: string;
   docenteNombre: string;
   docenteCorreo: string;

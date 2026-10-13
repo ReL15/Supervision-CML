@@ -8,7 +8,6 @@ import {
   MapPin,
   Users,
   Shield,
-  Database,
   LogOut,
   Building2,
 } from 'lucide-react';
@@ -20,7 +19,6 @@ interface NavbarProps {
   onOpenTeacherDirectory: () => void;
   onOpenMasterManager?: () => void;
   onOpenSchoolProfile?: () => void;
-  onOpenMySQLModal: () => void;
   onLogout: () => void;
 }
 
@@ -31,7 +29,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTeacherDirectory,
   onOpenMasterManager,
   onOpenSchoolProfile,
-  onOpenMySQLModal,
   onLogout,
 }) => {
   const isMaster = currentSession.role === 'master';
@@ -151,15 +148,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Perfil de Escuela</span>
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={onOpenMySQLModal}
-              title="Ver esquema SQL / MySQL"
-              className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl border border-white/15 transition-colors cursor-pointer"
-            >
-              <Database className="w-4 h-4 text-amber-300" />
-            </button>
 
             <button
               type="button"

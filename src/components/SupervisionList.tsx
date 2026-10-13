@@ -40,6 +40,7 @@ export const SupervisionList: React.FC<SupervisionListProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<DateFilter>('Todos');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Modal para ver boleta oficial de supervisión (Ficha)
   const [selectedForFicha, setSelectedForFicha] = useState<Supervision | null>(null);
@@ -79,7 +80,8 @@ export const SupervisionList: React.FC<SupervisionListProps> = ({
           sup.nombreEscuela.toLowerCase().includes(query) || sup.codigoEscuela.toLowerCase().includes(query);
         const matchesGrado =
           sup.grado.toLowerCase().includes(query) ||
-          (sup.gradoOtroDetalle && sup.gradoOtroDetalle.toLowerCase().includes(query));
+          (sup.gradoOtroDetalle && sup.gradoOtroDetalle.toLowerCase().includes(query)) ||
+          (sup.seccion && sup.seccion.toLowerCase().includes(query));
         const matchesCorreo = sup.docenteCorreo.toLowerCase().includes(query);
 
         if (!matchesDocente && !matchesEscuela && !matchesGrado && !matchesCorreo) {
@@ -96,7 +98,12 @@ export const SupervisionList: React.FC<SupervisionListProps> = ({
     const rawPhone = sup.docenteTelefono.replace(/\D/g, '');
     const phoneWithCountry = rawPhone.length === 8 ? `503${rawPhone}` : rawPhone;
 
-    const gradoNombre = sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado;
+    const gradoNombre = [
+      sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado,
+      sup.seccion,
+    ]
+      .filter(Boolean)
+      .join(' · ');
     const duracionStr = `${Math.floor(sup.duracionMinutos / 60)}h ${sup.duracionMinutos % 60}m`;
 
     const mensaje = `🇸🇻 *MINISTERIO DE EDUCACIÓN DE EL SALVADOR (MINED)*
@@ -127,16 +134,26 @@ _Dirección de Educación Básica y Media · MINED_`;
     window.open(url, '_blank');
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deletingId) {
-      deleteSupervision(deletingId);
-      setDeletingId(null);
-      onDeleted();
+      try {
+        await deleteSupervision(deletingId);
+        setDeletingId(null);
+        setActionError(null);
+        onDeleted();
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'No se pudo eliminar la supervisión.');
+      }
     }
   };
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {actionError}
+        </p>
+      )}
       {/* Controles de Búsqueda y Filtros */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -214,7 +231,12 @@ _Dirección de Educación Básica y Media · MINED_`;
       ) : (
         <div className="space-y-4">
           {filteredSupervisions.map((sup) => {
-            const gradoTexto = sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado;
+            const gradoTexto = [
+              sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado,
+              sup.seccion,
+            ]
+              .filter(Boolean)
+              .join(' · ');
             const duracionHoras = Math.floor(sup.duracionMinutos / 60);
             const duracionMin = sup.duracionMinutos % 60;
 

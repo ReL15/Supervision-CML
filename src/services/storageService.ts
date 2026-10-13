@@ -8,29 +8,43 @@ const STORAGE_KEYS = {
   SESSION: 'mined_supervision_session_prod_v2',
   MASTER_PASSWORD: 'mined_supervision_master_password_prod_v2',
 };
+const PREVIOUS_MASTER_DEFAULT = 'Master#MINED2026';
 
-// Initialize with clean production storage
-export const initStorage = () => {
-  // Limpiar claves antiguas de demostración si existieran
+const saveCache = <T,>(key: string, value: T[]) => {
+  localStorage.setItem(key, JSON.stringify(value));
+};
+
+const request = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+  let response: Response;
   try {
-    localStorage.removeItem('mined_supervision_schools_v1');
-    localStorage.removeItem('mined_supervision_teachers_v1');
-    localStorage.removeItem('mined_supervision_records_v1');
-    localStorage.removeItem('mined_supervision_session_v1');
+    response = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    });
   } catch {
-    // Ignore error in sandboxed environments
+    throw new Error('No se pudo conectar con la API. Verifique que MySQL y npm run server estén ejecutándose.');
   }
 
-  if (!localStorage.getItem(STORAGE_KEYS.SCHOOLS)) {
-    localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(INITIAL_SCHOOLS));
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `La API respondió con el estado ${response.status}.`);
   }
-  if (!localStorage.getItem(STORAGE_KEYS.TEACHERS)) {
-    localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(INITIAL_TEACHERS));
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.SUPERVISIONS)) {
-    localStorage.setItem(STORAGE_KEYS.SUPERVISIONS, JSON.stringify(INITIAL_SUPERVISIONS));
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.MASTER_PASSWORD)) {
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+};
+
+export const initStorage = async (): Promise<void> => {
+  const [schools, teachers, supervisions] = await Promise.all([
+    request<School[]>('/api/schools'),
+    request<Teacher[]>('/api/teachers'),
+    request<Supervision[]>('/api/supervisions'),
+  ]);
+  saveCache(STORAGE_KEYS.SCHOOLS, schools);
+  saveCache(STORAGE_KEYS.TEACHERS, teachers);
+  saveCache(STORAGE_KEYS.SUPERVISIONS, supervisions);
+
+  const savedMasterPassword = localStorage.getItem(STORAGE_KEYS.MASTER_PASSWORD);
+  if (!savedMasterPassword || savedMasterPassword === PREVIOUS_MASTER_DEFAULT) {
     localStorage.setItem(STORAGE_KEYS.MASTER_PASSWORD, MASTER_CREDENTIALS.defaultPassword);
   }
 };
@@ -72,53 +86,48 @@ export const getSchoolByCode = (code: string): School | undefined => {
   return schools.find((s) => s.codigo.trim() === code.trim());
 };
 
-export const saveSchool = (newSchool: School): boolean => {
+export const saveSchool = async (newSchool: School): Promise<boolean> => {
   const schools = getSchools();
   const exists = schools.some((s) => s.codigo.trim() === newSchool.codigo.trim());
   if (exists) return false;
+  await request('/api/schools', {
+    method: 'POST',
+    body: JSON.stringify(newSchool),
+  });
   schools.push(newSchool);
-  localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(schools));
-
-  // Enviar al backend si está configurado (no bloquear la UI)
-  const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
-  if (apiBase) {
-    fetch(`${apiBase.replace(/\/+$/,'')}/api/schools`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codigo: newSchool.codigo,
-        nombre: newSchool.nombre,
-        password_hash: newSchool.password,
-        perfil_completado: newSchool.perfilCompletado,
-        director_nombre: newSchool.directorNombre,
-        director_correo: newSchool.directorCorreo,
-        director_telefono: newSchool.directorTelefono,
-        director_dui: newSchool.directorDui,
-        departamento: newSchool.departamento,
-        municipio: newSchool.municipio,
-        latitud: newSchool.latitud,
-        longitud: newSchool.longitud,
-        fecha_registro: newSchool.fechaRegistro,
-      }),
-    }).catch((err) => console.warn('Failed to sync school to API', err));
-  }
-
+  saveCache(STORAGE_KEYS.SCHOOLS, schools);
   return true;
 };
 
-export const updateSchool = (updated: School) => {
+export const updateSchool = async (updated: School): Promise<void> => {
+  await request(`/api/schools/${encodeURIComponent(updated.codigo)}`, {
+    method: 'PUT',
+    body: JSON.stringify(updated),
+  });
   const schools = getSchools();
   const index = schools.findIndex((s) => s.codigo.trim() === updated.codigo.trim());
   if (index !== -1) {
     schools[index] = updated;
-    localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(schools));
+    saveCache(STORAGE_KEYS.SCHOOLS, schools);
   }
 };
 
-export const deleteSchool = (code: string): boolean => {
+export const deleteSchool = async (code: string): Promise<boolean> => {
+  await request(`/api/schools/${encodeURIComponent(code)}`, { method: 'DELETE' });
   const schools = getSchools();
   const filtered = schools.filter((s) => s.codigo.trim() !== code.trim());
-  localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(filtered));
+  saveCache(STORAGE_KEYS.SCHOOLS, filtered);
+  saveCache(
+    STORAGE_KEYS.TEACHERS,
+    getTeachers().map((teacher) => ({
+      ...teacher,
+      escuelasVinculadas: teacher.escuelasVinculadas.filter((schoolCode) => schoolCode !== code),
+    }))
+  );
+  saveCache(
+    STORAGE_KEYS.SUPERVISIONS,
+    getSupervisions().filter((supervision) => supervision.codigoEscuela !== code)
+  );
   return true;
 };
 
@@ -137,7 +146,9 @@ export const findTeacherByEmail = (email: string): Teacher | undefined => {
   return teachers.find((t) => t.correo.trim().toLowerCase() === email.trim().toLowerCase());
 };
 
-export const saveOrUpdateTeacher = (teacherData: Partial<Teacher> & { correo: string }): Teacher => {
+export const saveOrUpdateTeacher = async (
+  teacherData: Partial<Teacher> & { correo: string }
+): Promise<Teacher> => {
   const teachers = getTeachers();
   const index = teachers.findIndex(
     (t) => t.correo.trim().toLowerCase() === teacherData.correo.trim().toLowerCase()
@@ -153,19 +164,9 @@ export const saveOrUpdateTeacher = (teacherData: Partial<Teacher> & { correo: st
       ...teacherData,
       escuelasVinculadas: updatedSchools,
     };
+    await request('/api/teachers', { method: 'POST', body: JSON.stringify(updated) });
     teachers[index] = updated;
-    localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
-
-    // Sync to API if configured
-    const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
-    if (apiBase) {
-      fetch(`${apiBase.replace(/\/+$/,'')}/api/teachers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      }).catch((err) => console.warn('Failed to sync teacher to API', err));
-    }
-
+    saveCache(STORAGE_KEYS.TEACHERS, teachers);
     return updated;
   } else {
     const newTeacher: Teacher = {
@@ -178,31 +179,24 @@ export const saveOrUpdateTeacher = (teacherData: Partial<Teacher> & { correo: st
       especialidad: teacherData.especialidad || 'Docente de Aula',
       fechaRegistro: new Date().toISOString().split('T')[0],
     };
+    await request('/api/teachers', { method: 'POST', body: JSON.stringify(newTeacher) });
     teachers.push(newTeacher);
-    localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
-
-    const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
-    if (apiBase) {
-      fetch(`${apiBase.replace(/\/+$/,'')}/api/teachers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTeacher),
-      }).catch((err) => console.warn('Failed to sync teacher to API', err));
-    }
-
+    saveCache(STORAGE_KEYS.TEACHERS, teachers);
     return newTeacher;
   }
 };
 
-export const linkTeacherToSchool = (teacherEmail: string, schoolCode: string): boolean => {
+export const linkTeacherToSchool = async (teacherEmail: string, schoolCode: string): Promise<boolean> => {
   const teachers = getTeachers();
   const teacher = teachers.find(
     (t) => t.correo.trim().toLowerCase() === teacherEmail.trim().toLowerCase()
   );
   if (!teacher) return false;
   if (!teacher.escuelasVinculadas.includes(schoolCode)) {
-    teacher.escuelasVinculadas.push(schoolCode);
-    localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
+    await saveOrUpdateTeacher({
+      ...teacher,
+      escuelasVinculadas: [...teacher.escuelasVinculadas, schoolCode],
+    });
   }
   return true;
 };
@@ -217,19 +211,9 @@ export const getSupervisions = (): Supervision[] => {
   }
 };
 
-export const saveSupervision = (sup: Supervision) => {
-  const list = getSupervisions();
-  const index = list.findIndex((item) => item.id === sup.id);
-  if (index !== -1) {
-    list[index] = { ...sup, updatedAt: new Date().toISOString() };
-  } else {
-    list.unshift({ ...sup, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-  }
-  localStorage.setItem(STORAGE_KEYS.SUPERVISIONS, JSON.stringify(list));
-
-  // Link teacher to school
+export const saveSupervision = async (sup: Supervision): Promise<void> => {
   if (sup.docenteCorreo) {
-    saveOrUpdateTeacher({
+    await saveOrUpdateTeacher({
       correo: sup.docenteCorreo,
       nombre: sup.docenteNombre,
       telefono: sup.docenteTelefono,
@@ -237,22 +221,22 @@ export const saveSupervision = (sup: Supervision) => {
       escuelasVinculadas: [sup.codigoEscuela],
     });
   }
-
-  // Sync to backend if configured (non-blocking)
-  const apiBase = (window as any).__API_BASE__ || process.env.REACT_APP_API_URL || '';
-  if (apiBase) {
-    fetch(`${apiBase.replace(/\/+$/,'')}/api/supervisions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sup),
-    }).catch((err) => console.warn('Failed to sync supervision to API', err));
+  await request('/api/supervisions', { method: 'POST', body: JSON.stringify(sup) });
+  const list = getSupervisions();
+  const index = list.findIndex((item) => item.id === sup.id);
+  if (index !== -1) {
+    list[index] = { ...sup, updatedAt: new Date().toISOString() };
+  } else {
+    list.unshift({ ...sup, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   }
+  saveCache(STORAGE_KEYS.SUPERVISIONS, list);
 };
 
-export const deleteSupervision = (id: string): boolean => {
+export const deleteSupervision = async (id: string): Promise<boolean> => {
+  await request(`/api/supervisions/${encodeURIComponent(id)}`, { method: 'DELETE' });
   const list = getSupervisions();
   const filtered = list.filter((item) => item.id !== id);
-  localStorage.setItem(STORAGE_KEYS.SUPERVISIONS, JSON.stringify(filtered));
+  saveCache(STORAGE_KEYS.SUPERVISIONS, filtered);
   return true;
 };
 
@@ -356,6 +340,7 @@ CREATE TABLE IF NOT EXISTS supervisiones_aula (
     id VARCHAR(50) PRIMARY KEY,
     codigo_escuela VARCHAR(10) NOT NULL,
     grado VARCHAR(60) NOT NULL,
+    seccion VARCHAR(100) NOT NULL DEFAULT '',
     grado_otro_detalle VARCHAR(100),
     docente_correo VARCHAR(150) NOT NULL,
     docente_nombre VARCHAR(150) NOT NULL,
@@ -407,7 +392,7 @@ ${supervisions.length > 0 ? `
 ${supervisions
   .map(
     (sup) =>
-      `INSERT INTO supervisiones_aula (id, codigo_escuela, grado, docente_correo, docente_nombre, docente_telefono, docente_dui, fecha_supervision, hora_inicio, hora_fin, duracion_minutos, matricula_siges, estudiantes_asistieron, estudiantes_no_asistieron, porcentaje_asistencia, telefonos_utilizados, laptops_computadoras, dispositivos_apoyo, total_dispositivos, f4_completados, f1_completado, observaciones, creado_por) VALUES ('${sup.id}', '${sup.codigoEscuela}', '${sup.grado}', '${sup.docenteCorreo}', '${sup.docenteNombre.replace(/'/g, "''")}', '${sup.docenteTelefono}', '${sup.docenteDui}', '${sup.fecha}', '${sup.horaInicio}:00', '${sup.horaFin}:00', ${sup.duracionMinutos}, ${sup.matriculaSiges}, ${sup.estudiantesAsistieron}, ${sup.estudiantesNoAsistieron}, ${sup.porcentajeAsistencia}, ${sup.telefonosUtilizados}, ${sup.laptopsComputadoras}, ${sup.dispositivosApoyoPedagogico}, ${sup.totalDispositivos}, ${sup.f4Completados}, '${sup.f1Completado}', '${sup.observaciones.replace(/'/g, "''")}', '${sup.creadoPor}');`
+      `INSERT INTO supervisiones_aula (id, codigo_escuela, grado, seccion, docente_correo, docente_nombre, docente_telefono, docente_dui, fecha_supervision, hora_inicio, hora_fin, duracion_minutos, matricula_siges, estudiantes_asistieron, estudiantes_no_asistieron, porcentaje_asistencia, telefonos_utilizados, laptops_computadoras, dispositivos_apoyo, total_dispositivos, f4_completados, f1_completado, observaciones, creado_por) VALUES ('${sup.id}', '${sup.codigoEscuela}', '${sup.grado}', '${sup.seccion?.replace(/'/g, "''") || ''}', '${sup.docenteCorreo}', '${sup.docenteNombre.replace(/'/g, "''")}', '${sup.docenteTelefono}', '${sup.docenteDui}', '${sup.fecha}', '${sup.horaInicio}:00', '${sup.horaFin}:00', ${sup.duracionMinutos}, ${sup.matriculaSiges}, ${sup.estudiantesAsistieron}, ${sup.estudiantesNoAsistieron}, ${sup.porcentajeAsistencia}, ${sup.telefonosUtilizados}, ${sup.laptopsComputadoras}, ${sup.dispositivosApoyoPedagogico}, ${sup.totalDispositivos}, ${sup.f4Completados}, '${sup.f1Completado}', '${sup.observaciones.replace(/'/g, "''")}', '${sup.creadoPor}');`
   )
   .join('\n')}
 ` : '-- (Sin registros de supervisiones aún)\n'}

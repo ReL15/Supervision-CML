@@ -59,7 +59,7 @@ export const MasterSchoolManagerModal: React.FC<MasterSchoolManagerModalProps> =
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
-  const handleRegisterSchool = (e: React.FormEvent) => {
+  const handleRegisterSchool = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -93,25 +93,33 @@ export const MasterSchoolManagerModal: React.FC<MasterSchoolManagerModalProps> =
       fechaRegistro: new Date().toISOString().split('T')[0],
     };
 
-    const ok = saveSchool(newSchool);
-    if (!ok) {
-      setErrorMsg(`Ya existe una escuela registrada con el código ${trimmedCode}.`);
-      return;
-    }
+    try {
+      const ok = await saveSchool(newSchool);
+      if (!ok) {
+        setErrorMsg(`Ya existe una escuela registrada con el código ${trimmedCode}.`);
+        return;
+      }
 
-    setSuccessMsg(`Centro escolar ${trimmedCode} registrado con éxito.`);
-    setCodigo('');
-    setNombre('');
-    setPassword(generateSecurePassword(''));
-    onSchoolsUpdated();
+      setSuccessMsg(`Centro escolar ${trimmedCode} registrado con éxito.`);
+      setCodigo('');
+      setNombre('');
+      setPassword(generateSecurePassword(''));
+      onSchoolsUpdated();
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'No se pudo guardar el centro escolar.');
+    }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deletingSchool) {
-      deleteSchool(deletingSchool.codigo);
-      setSuccessMsg(`Centro escolar ${deletingSchool.codigo} eliminado.`);
-      setDeletingSchool(null);
-      onSchoolsUpdated();
+      try {
+        await deleteSchool(deletingSchool.codigo);
+        setSuccessMsg(`Centro escolar ${deletingSchool.codigo} eliminado.`);
+        setDeletingSchool(null);
+        onSchoolsUpdated();
+      } catch (error) {
+        setErrorMsg(error instanceof Error ? error.message : 'No se pudo eliminar el centro escolar.');
+      }
     }
   };
 

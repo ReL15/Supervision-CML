@@ -17,7 +17,6 @@ import { SupervisionList } from './components/SupervisionList';
 import { SchoolsMapView } from './components/SchoolsMapView';
 import { TeacherDirectoryModal } from './components/TeacherDirectoryModal';
 import { MasterSchoolManagerModal } from './components/MasterSchoolManagerModal';
-import { MySQLSchemaModal } from './components/MySQLSchemaModal';
 import { OfficialReportModal } from './components/OfficialReportModal';
 import { SchoolOnboardingModal } from './components/SchoolOnboardingModal';
 import { EditSchoolModal } from './components/EditSchoolModal';
@@ -31,9 +30,24 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Inicializar almacenamiento persistente
+  const [storageReady, setStorageReady] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+
   useEffect(() => {
-    initStorage();
+    let cancelled = false;
+    initStorage().then(
+      () => {
+        if (!cancelled) setStorageReady(true);
+      },
+      (error: unknown) => {
+        if (!cancelled) {
+          setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de MySQL.');
+        }
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [session, setSession] = useState<UserSession | null>(() => getUserSession());
@@ -59,7 +73,6 @@ export default function App() {
   // Modales
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [showMasterManager, setShowMasterManager] = useState(false);
-  const [showMySQLModal, setShowMySQLModal] = useState(false);
   const [viewingFicha, setViewingFicha] = useState<Supervision | null>(null);
   const [editingOwnSchool, setEditingOwnSchool] = useState(false);
 
@@ -92,6 +105,26 @@ export default function App() {
     setEditingSupervision(null);
     setActiveTab('list');
   };
+
+  if (!storageReady) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
+        <div className="max-w-lg rounded-2xl bg-white p-6 text-center shadow-sm">
+          {storageError ? (
+            <>
+              <h1 className="text-lg font-bold text-red-700">No se pudo conectar con MySQL</h1>
+              <p className="mt-2 text-sm text-slate-600">{storageError}</p>
+              <p className="mt-3 text-xs text-slate-500">
+                Inicie MySQL en Laragon y ejecute <code>npm run server</code>. Luego recargue la página.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm font-medium text-slate-600">Conectando con la base de datos MySQL…</p>
+          )}
+        </div>
+      </main>
+    );
+  }
 
   // Manejar edición desde el listado
   const handleEditFromList = (sup: Supervision) => {
@@ -132,7 +165,6 @@ export default function App() {
         onOpenTeacherDirectory={() => setShowTeacherModal(true)}
         onOpenMasterManager={() => setShowMasterManager(true)}
         onOpenSchoolProfile={() => setEditingOwnSchool(true)}
-        onOpenMySQLModal={() => setShowMySQLModal(true)}
         onLogout={handleLogout}
       />
 
@@ -241,7 +273,9 @@ export default function App() {
                             <span className="font-bold text-slate-800">{sup.docenteNombre}</span>
                             <span className="text-slate-400">·</span>
                             <span className="text-blue-900 font-medium">
-                              {sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado}
+                              {[sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado, sup.seccion]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 font-mono">
@@ -381,12 +415,6 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Esquema MySQL */}
-      <MySQLSchemaModal
-        isOpen={showMySQLModal}
-        onClose={() => setShowMySQLModal(false)}
-      />
-
       {/* Modal de Ficha Oficial de Supervisión (Imprimible PDF) */}
       {viewingFicha && (
         <OfficialReportModal
@@ -419,6 +447,7 @@ export default function App() {
         <EditSchoolModal
           school={currentSchoolObj}
           isOpen={true}
+          readOnlyIdentity
           onClose={() => setEditingOwnSchool(false)}
           onSaved={(updated) => {
             refreshData();

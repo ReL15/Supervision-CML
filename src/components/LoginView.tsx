@@ -10,7 +10,7 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   // Estado para login Master (Email + Contraseña)
-  const [masterEmail, setMasterEmail] = useState('tch.rivlue15@outlook.com');
+  const [masterEmail, setMasterEmail] = useState('');
   const [masterPassword, setMasterPassword] = useState('');
   const [masterError, setMasterError] = useState<string | null>(null);
 
@@ -29,9 +29,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
     const emailTrimmed = masterEmail.trim().toLowerCase();
     if (emailTrimmed !== 'tch.rivlue15@outlook.com') {
-      setMasterError(
-        'Acceso denegado: Solo la cuenta oficial "tch.rivlue15@outlook.com" posee privilegios de Administrador Master.'
-      );
+      setMasterError('Credenciales de Administrador Master incorrectas. Verifique sus datos.');
       return;
     }
 
@@ -43,7 +41,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
     const session: UserSession = {
       role: 'master',
-      email: 'tch.rivlue15@outlook.com',
+      email: emailTrimmed,
       userName: 'Administrador Master MINED',
     };
     setUserSession(session);
@@ -176,7 +174,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
                     <span>Cuenta de Correo Master</span>
-                    <span className="text-[10px] text-slate-400">tch.rivlue15@outlook.com</span>
                   </label>
                   <div className="relative">
                     <input
@@ -184,7 +181,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                       required
                       value={masterEmail}
                       onChange={(e) => setMasterEmail(e.target.value)}
-                      placeholder="tch.rivlue15@outlook.com"
+                      placeholder="Correo autorizado"
                       className="w-full pl-9 pr-3.5 py-2.5 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden font-mono"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />

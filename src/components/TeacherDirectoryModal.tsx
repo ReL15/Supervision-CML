@@ -63,14 +63,23 @@ export const TeacherDirectoryModal: React.FC<TeacherDirectoryModalProps> = ({
     return true;
   });
 
-  const handleLinkToActiveSchool = (teacherEmail: string) => {
-    linkTeacherToSchool(teacherEmail, activeSchoolCode);
-    setSuccessMsg(`Docente vinculado con éxito al centro escolar ${activeSchoolCode}`);
-    setTimeout(() => setSuccessMsg(null), 3000);
-    onUpdated();
+  const handleLinkToActiveSchool = async (teacherEmail: string) => {
+    setAddError(null);
+    try {
+      const linked = await linkTeacherToSchool(teacherEmail, activeSchoolCode);
+      if (!linked) {
+        setAddError('No se encontró el docente para vincular.');
+        return;
+      }
+      setSuccessMsg(`Docente vinculado con éxito al centro escolar ${activeSchoolCode}`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+      onUpdated();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : 'No se pudo vincular el docente.');
+    }
   };
 
-  const handleCreateTeacher = (e: React.FormEvent) => {
+  const handleCreateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
 
@@ -84,24 +93,28 @@ export const TeacherDirectoryModal: React.FC<TeacherDirectoryModalProps> = ({
       return;
     }
 
-    saveOrUpdateTeacher({
-      nombre: newNombre.trim(),
-      correo: newCorreo.trim().toLowerCase(),
-      telefono: newTelefono.trim(),
-      dui: newDui.trim(),
-      especialidad: newEspecialidad.trim() || 'Docente de Aula',
-      escuelasVinculadas: [activeSchoolCode],
-    });
+    try {
+      await saveOrUpdateTeacher({
+        nombre: newNombre.trim(),
+        correo: newCorreo.trim().toLowerCase(),
+        telefono: newTelefono.trim(),
+        dui: newDui.trim(),
+        especialidad: newEspecialidad.trim() || 'Docente de Aula',
+        escuelasVinculadas: [activeSchoolCode],
+      });
 
-    setSuccessMsg(`Profesor registrado y vinculado exitosamente.`);
-    setTimeout(() => setSuccessMsg(null), 3000);
-    setShowAddForm(false);
-    setNewNombre('');
-    setNewCorreo('');
-    setNewTelefono('');
-    setNewDui('');
-    setNewEspecialidad('');
-    onUpdated();
+      setSuccessMsg(`Profesor registrado y vinculado exitosamente.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+      setShowAddForm(false);
+      setNewNombre('');
+      setNewCorreo('');
+      setNewTelefono('');
+      setNewDui('');
+      setNewEspecialidad('');
+      onUpdated();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : 'No se pudo guardar el docente.');
+    }
   };
 
   return (

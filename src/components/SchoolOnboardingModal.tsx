@@ -90,7 +90,7 @@ export const SchoolOnboardingModal: React.FC<SchoolOnboardingModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -128,8 +128,12 @@ export const SchoolOnboardingModal: React.FC<SchoolOnboardingModalProps> = ({
       longitud,
     };
 
-    updateSchool(updated);
-    onCompleted(updated);
+    try {
+      await updateSchool(updated);
+      onCompleted(updated);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'No se pudo guardar el perfil del centro escolar.');
+    }
   };
 
   return (

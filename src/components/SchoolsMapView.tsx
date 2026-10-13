@@ -347,7 +347,9 @@ export const SchoolsMapView: React.FC<SchoolsMapViewProps> = ({
                       <tr key={sup.id} className="hover:bg-slate-50">
                         <td className="p-3 font-mono font-medium">{sup.fecha}</td>
                         <td className="p-3 font-bold text-blue-900">
-                          {sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado}
+                          {[sup.grado === 'Otro' ? sup.gradoOtroDetalle : sup.grado, sup.seccion]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </td>
                         <td className="p-3 font-medium text-slate-800">{sup.docenteNombre}</td>
                         <td className="p-3 font-mono text-slate-500">

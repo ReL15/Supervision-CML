@@ -22,7 +22,7 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto no-print">
+    <div className="report-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-auto animate-in zoom-in-95 duration-150">
         {/* Barra superior de acciones */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between no-print">
@@ -93,10 +93,14 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
               <span>{school ? `${school.departamento}, ${school.municipio}` : 'El Salvador'}</span>
             </div>
             <div>
-              <span className="font-bold text-slate-700">Grado o Sección:</span>{' '}
+              <span className="font-bold text-slate-700">Grado:</span>{' '}
               <span className="font-bold text-blue-900">
                 {supervision.grado === 'Otro' ? supervision.gradoOtroDetalle : supervision.grado}
               </span>
+            </div>
+            <div>
+              <span className="font-bold text-slate-700">Sección y jornada:</span>{' '}
+              <span className="font-bold text-blue-900">{supervision.seccion || '—'}</span>
             </div>
           </div>
 

@@ -21,6 +21,7 @@ import {
 interface EditSchoolModalProps {
   school: School;
   isOpen: boolean;
+  readOnlyIdentity?: boolean;
   onClose: () => void;
   onSaved: (updatedSchool: School) => void;
 }
@@ -28,6 +29,7 @@ interface EditSchoolModalProps {
 export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
   school,
   isOpen,
+  readOnlyIdentity = false,
   onClose,
   onSaved,
 }) => {
@@ -121,7 +123,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -155,9 +157,13 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
       perfilCompletado: Boolean(directorNombre.trim() && departamento.trim()),
     };
 
-    updateSchool(updated);
-    onSaved(updated);
-    onClose();
+    try {
+      await updateSchool(updated);
+      onSaved(updated);
+      onClose();
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'No se pudo actualizar el centro escolar.');
+    }
   };
 
   return (
@@ -216,40 +222,48 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nombre Oficial del Centro Escolar *
+                  Nombre Oficial del Centro Escolar
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden"
-                />
-              </div>
-
-              <div className="sm:col-span-3">
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Contraseña Asignada</span>
-                  <button
-                    type="button"
-                    onClick={() => setPassword(generateSecurePassword(school.codigo))}
-                    className="text-[11px] text-[#1b4985] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    Regenerar Contraseña
-                  </button>
-                </label>
-                <div className="relative">
+                {readOnlyIdentity ? (
+                  <p className="w-full bg-slate-100 text-slate-700 px-3 py-2 text-sm border border-slate-200 rounded-xl">
+                    {school.nombre}
+                  </p>
+                ) : (
                   <input
                     type="text"
                     required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden font-mono font-bold text-slate-800"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden"
                   />
-                  <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-                </div>
+                )}
               </div>
+
+              {!readOnlyIdentity && (
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Contraseña Asignada</span>
+                    <button
+                      type="button"
+                      onClick={() => setPassword(generateSecurePassword(school.codigo))}
+                      className="text-[11px] text-[#1b4985] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Regenerar Contraseña
+                    </button>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden font-mono font-bold text-slate-800"
+                    />
+                    <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

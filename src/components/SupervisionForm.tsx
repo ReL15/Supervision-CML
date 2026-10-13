@@ -59,6 +59,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
   );
   const [grado, setGrado] = useState<GradoOficial>(editingSupervision?.grado || '1° Grado');
   const [gradoOtro, setGradoOtro] = useState(editingSupervision?.gradoOtroDetalle || '');
+  const [seccion, setSeccion] = useState(editingSupervision?.seccion || '');
 
   // Section 2: Datos del Docente
   const [docenteCorreo, setDocenteCorreo] = useState(
@@ -118,6 +119,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
       setSelectedSchoolCode(editingSupervision.codigoEscuela);
       setGrado(editingSupervision.grado);
       setGradoOtro(editingSupervision.gradoOtroDetalle || '');
+      setSeccion(editingSupervision.seccion || '');
       setDocenteCorreo(editingSupervision.docenteCorreo);
       setDocenteNombre(editingSupervision.docenteNombre);
       setDocenteTelefono(editingSupervision.docenteTelefono);
@@ -224,12 +226,13 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
     setObservaciones('');
     setGrado('1° Grado');
     setGradoOtro('');
+    setSeccion('');
     setFormError(null);
     if (onCancelEdit) onCancelEdit();
   };
 
   // Guardar supervisión
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -262,7 +265,12 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
     }
 
     if (grado === 'Otro' && !gradoOtro.trim()) {
-      setFormError('Ha seleccionado "Otro" en Grado/Sección. Especifique el nombre del grado.');
+      setFormError('Ha seleccionado "Otro". Especifique el nombre del grado.');
+      return;
+    }
+
+    if (!seccion.trim()) {
+      setFormError('Indique la sección y jornada (por ejemplo, A Vespertino).');
       return;
     }
 
@@ -279,6 +287,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
       nombreEscuela: schoolObj?.nombre || `Centro Escolar ${selectedSchoolCode}`,
       grado,
       gradoOtroDetalle: grado === 'Otro' ? gradoOtro.trim() : undefined,
+      seccion: seccion.trim(),
       docenteNombre: docenteNombre.trim(),
       docenteCorreo: docenteCorreo.trim().toLowerCase(),
       docenteTelefono: docenteTelefono.trim(),
@@ -303,11 +312,15 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    saveSupervision(supervisionRecord);
-    setSuccessNotice(true);
-    setTimeout(() => setSuccessNotice(false), 3000);
-
-    onSaved(supervisionRecord);
+    try {
+      await saveSupervision(supervisionRecord);
+      setSuccessNotice(true);
+      setTimeout(() => setSuccessNotice(false), 3000);
+      onSaved(supervisionRecord);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'No se pudo guardar la supervisión.');
+      return;
+    }
 
     if (!editingSupervision) {
       // Limpiar parcialmente para siguiente registro rápido
@@ -446,10 +459,10 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
               </div>
             </div>
 
-            {/* Grado o Sección */}
+            {/* Grado y sección */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Grado o Sección Oficial <span className="text-red-500">*</span>
+                Grado Oficial <span className="text-red-500">*</span>
               </label>
               <select
                 value={grado}
@@ -467,7 +480,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
               {grado === 'Otro' && (
                 <div className="mt-2.5 animate-in fade-in duration-150">
                   <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Especifique el grado o sección:
+                    Especifique el grado:
                   </label>
                   <input
                     type="text"
@@ -478,6 +491,19 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
                   />
                 </div>
               )}
+              <div className="mt-2.5">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Sección y jornada <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={seccion}
+                  onChange={(e) => setSeccion(e.target.value)}
+                  placeholder="Ej. A Vespertino"
+                  className="w-full px-3.5 py-2 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden bg-white"
+                />
+              </div>
             </div>
           </div>
         </div>
