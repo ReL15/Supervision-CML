@@ -11,5 +11,5 @@ export const INITIAL_SUPERVISIONS: Supervision[] = [];
 export const MASTER_CREDENTIALS = {
   email: 'tch.rivlue15@outlook.com',
   // Contraseña institucional asignada al Administrador Master
-  defaultPassword: 'Mined#13549-YNM3',
+  defaultPassword: 'Tohka.10',
 };
