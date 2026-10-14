@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Supervision, School, UserSession, GradoOficial } from '../types';
 import {
-  findTeacherByEmail,
+  getTeachers,
   saveSupervision,
   getSchools,
 } from '../services/storageService';
@@ -51,6 +51,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
   onCancelEdit,
 }) => {
   const allSchools = getSchools();
+  const allTeachers = getTeachers();
   const isMaster = currentSession.role === 'master';
 
   // Section 1: Centro Escolar y Grado
@@ -75,6 +76,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
     editingSupervision?.docenteDui || ''
   );
   const [docenteAutocompletado, setDocenteAutocompletado] = useState(false);
+  const [showTeacherSuggestion, setShowTeacherSuggestion] = useState(false);
 
   // Section 3: Horario y Asistencia
   const [fecha, setFecha] = useState(
@@ -148,23 +150,59 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
   // Información del centro escolar seleccionado
   const currentSchool = allSchools.find((s) => s.codigo === selectedSchoolCode);
 
-  // Autocompletado del docente según correo (@clases.edu.sv)
+  const linkedTeachers = allTeachers.filter((teacher) =>
+    teacher.escuelasVinculadas?.includes(selectedSchoolCode)
+  );
+  const normalizedTeacherName = docenteNombre.trim().toLocaleLowerCase();
+  const matchingTeachers = normalizedTeacherName
+    ? linkedTeachers.filter((teacher) =>
+        teacher.nombre.trim().toLocaleLowerCase().includes(normalizedTeacherName)
+      )
+    : [];
+  const exactTeacherMatches = matchingTeachers.filter(
+    (teacher) => teacher.nombre.trim().toLocaleLowerCase() === normalizedTeacherName
+  );
+  const suggestedTeacher =
+    exactTeacherMatches.length === 1
+      ? exactTeacherMatches[0]
+      : matchingTeachers.length === 1
+        ? matchingTeachers[0]
+        : undefined;
+
+  // Autocompleta los datos a partir de un docente vinculado a esta escuela.
+  const handleTeacherNameChange = (nameInput: string) => {
+    setDocenteNombre(nameInput);
+    setDocenteAutocompletado(false);
+    setShowTeacherSuggestion(true);
+    if (docenteAutocompletado) {
+      setDocenteCorreo('');
+      setDocenteTelefono('');
+      setDocenteDui('');
+    }
+  };
+
+  const selectTeacher = (teacher: (typeof allTeachers)[number]) => {
+    setDocenteNombre(teacher.nombre);
+    setDocenteCorreo(teacher.correo);
+    setDocenteTelefono(teacher.telefono);
+    setDocenteDui(teacher.dui);
+    setDocenteAutocompletado(true);
+    setShowTeacherSuggestion(false);
+  };
+
+  const handleSchoolChange = (schoolCode: string) => {
+    setSelectedSchoolCode(schoolCode);
+    setDocenteCorreo('');
+    setDocenteNombre('');
+    setDocenteTelefono('');
+    setDocenteDui('');
+    setDocenteAutocompletado(false);
+    setShowTeacherSuggestion(false);
+  };
+
   const handleEmailChange = (emailInput: string) => {
     setDocenteCorreo(emailInput);
-    const trimmed = emailInput.trim().toLowerCase();
-    if (trimmed.endsWith('@clases.edu.sv')) {
-      const foundTeacher = findTeacherByEmail(trimmed);
-      if (foundTeacher) {
-        setDocenteNombre(foundTeacher.nombre);
-        setDocenteTelefono(foundTeacher.telefono);
-        setDocenteDui(foundTeacher.dui);
-        setDocenteAutocompletado(true);
-      } else {
-        setDocenteAutocompletado(false);
-      }
-    } else {
-      setDocenteAutocompletado(false);
-    }
+    setDocenteAutocompletado(false);
   };
 
   // Formateadores automáticos de teléfono y DUI
@@ -216,6 +254,8 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
     setDocenteNombre('');
     setDocenteTelefono('');
     setDocenteDui('');
+    setDocenteAutocompletado(false);
+    setShowTeacherSuggestion(false);
     setMatriculaSiges(0);
     setEstudiantesAsistieron(0);
     setTelefonos(0);
@@ -420,7 +460,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
                 <div className="relative">
                   <select
                     value={selectedSchoolCode}
-                    onChange={(e) => setSelectedSchoolCode(e.target.value)}
+                    onChange={(e) => handleSchoolChange(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden bg-white"
                   >
                     {allSchools.length === 0 ? (
@@ -520,7 +560,7 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-[#0f2d59]">Datos del Docente</h3>
                 <p className="text-[11px] text-slate-500">
-                  Validación institucional y autocompletado por correo @clases.edu.sv
+                  Busque al docente por nombre dentro de los vinculados a esta escuela
                 </p>
               </div>
             </div>
@@ -534,28 +574,8 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Correo Institucional Oficial */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
-                <span>
-                  Correo Institucional (@clases.edu.sv) <span className="text-red-500">*</span>
-                </span>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  Escriba el correo para autocompletar datos del docente
-                </span>
-              </label>
-              <input
-                type="email"
-                required
-                value={docenteCorreo}
-                onChange={(e) => handleEmailChange(e.target.value)}
-                placeholder="nombre.apellido@clases.edu.sv"
-                className="w-full px-3.5 py-2.5 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden font-mono"
-              />
-            </div>
-
             {/* Nombre Completo */}
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 relative">
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Nombre Completo del Profesor(a) <span className="text-red-500">*</span>
               </label>
@@ -563,9 +583,55 @@ export const SupervisionForm: React.FC<SupervisionFormProps> = ({
                 type="text"
                 required
                 value={docenteNombre}
-                onChange={(e) => setDocenteNombre(e.target.value)}
+                autoComplete="off"
+                onFocus={() => setShowTeacherSuggestion(true)}
+                onChange={(e) => handleTeacherNameChange(e.target.value)}
                 placeholder="Ej. Prof. Jorge Rivera Lué"
                 className="w-full px-3.5 py-2.5 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden"
+              />
+              {showTeacherSuggestion && suggestedTeacher && (
+                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectTeacher(suggestedTeacher)}
+                    className="w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50"
+                  >
+                    <span className="block text-sm font-semibold text-slate-800">
+                      {suggestedTeacher.nombre}
+                    </span>
+                    <span className="block text-xs text-slate-500">
+                      {suggestedTeacher.correo}
+                    </span>
+                  </button>
+                </div>
+              )}
+              {showTeacherSuggestion && matchingTeachers.length > 1 && !suggestedTeacher && (
+                <p className="mt-1 text-xs text-slate-500" role="status">
+                  Hay varios nombres similares; escriba más para identificar un único docente.
+                </p>
+              )}
+              {showTeacherSuggestion && normalizedTeacherName && matchingTeachers.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500" role="status">
+                  No hay coincidencias en el directorio de esta escuela. Puede completar los datos manualmente.
+                </p>
+              )}
+            </div>
+
+            {/* Correo Institucional Oficial */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Correo Institucional (@clases.edu.sv) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                required
+                value={docenteCorreo}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                placeholder="Se completará al seleccionar el docente"
+                className="w-full px-3.5 py-2.5 text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0f2d59] focus:outline-hidden font-mono"
               />
             </div>
 
